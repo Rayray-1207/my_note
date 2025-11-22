@@ -826,3 +826,92 @@ export default function App() {
       </div>
     );
   }
+
+  return (
+    <div className="w-full h-screen max-w-md mx-auto bg-neu-base relative overflow-hidden flex flex-col shadow-2xl sm:rounded-3xl sm:my-10 sm:border sm:border-slate-100">
+      {/* Sidebar */}
+      {renderSidebar()}
+
+      {/* View Routing */}
+      {view === 'HOME' && (
+        <>
+          {renderTopBar()}
+          {renderHome()}
+          {renderBottomBar()}
+        </>
+      )}
+
+      {view === 'LIST' && (
+        <>
+          {renderTopBar()}
+          <div className="flex-1 overflow-y-auto no-scrollbar pb-24 animate-fade-in">
+             {homeMode === 'CALENDAR' && <CalendarView records={filteredRecords} onSelectRecord={(r) => { setEditingRecord(r); setChatMessages([]); setSuggestedKeywords([]); setView('EDIT_RECORD'); }} />}
+             {/* Placeholder for other modes if needed, or just reuse list logic */}
+             {homeMode !== 'CALENDAR' && (
+                <div className="p-8 text-center text-slate-400 text-sm mt-20">
+                   瀑布流和列表模式开发中... 🚧 <br/>请使用日历模式查看
+                </div>
+             )}
+          </div>
+          {renderBottomBar()}
+        </>
+      )}
+
+      {view === 'EDIT_RECORD' && renderEditRecord()}
+      
+      {view === 'INPUT_VOICE' && (
+         <div className="fixed inset-0 z-50 bg-neu-base flex flex-col items-center justify-center animate-fade-in">
+             <div className="text-4xl font-bold text-neu-text mb-8">{timeLeft}s</div>
+             <div className={`w-32 h-32 rounded-full flex items-center justify-center transition-all ${isListening ? 'bg-green-500 shadow-[0_0_40px_rgba(34,197,94,0.6)] scale-110' : 'bg-slate-100'}`}>
+                 <Mic size={48} className={isListening ? 'text-white animate-pulse' : 'text-slate-400'} />
+             </div>
+             <p className="mt-8 text-slate-500 max-w-xs text-center leading-relaxed px-8 h-20">
+                 {inputText || "正在聆听..."}
+             </p>
+             <div className="flex gap-8 mt-12">
+                 <button onClick={() => { stopListening(); setView('HOME'); }} className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                    <X size={24} />
+                 </button>
+                 <button onClick={handleVoiceStop} className="w-16 h-16 rounded-full bg-black flex items-center justify-center text-green-500 shadow-lg">
+                    <Check size={24} />
+                 </button>
+             </div>
+         </div>
+      )}
+
+      {view === 'SEARCH' && (
+          <div className="fixed inset-0 z-50 bg-neu-base flex flex-col animate-slide-up">
+              <div className="pt-12 px-6 pb-4 flex gap-4 items-center">
+                  <div className="flex-1 h-12 bg-neu-base shadow-neu-pressed rounded-full px-6 flex items-center">
+                      <Search size={18} className="text-slate-400 mr-2"/>
+                      <input 
+                          className="bg-transparent border-none focus:outline-none text-base w-full text-neu-text"
+                          placeholder="搜索记忆..."
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          autoFocus
+                      />
+                  </div>
+                  <button onClick={() => setView('HOME')} className="text-slate-400 font-medium">取消</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                  {filteredRecords.map(r => (
+                      <div key={r.id} onClick={() => { setEditingRecord(r); setView('EDIT_RECORD'); }} className="mb-4 p-4 rounded-2xl bg-neu-base shadow-neu-flat active:scale-[0.98] transition-transform">
+                          <div className="font-bold text-neu-text mb-1">{r.type === RecordType.NOTE ? r.topic : r.mediaMeta?.title}</div>
+                          <div className="text-xs text-slate-400">{formatDateTime(r.timestamp)}</div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      )}
+      
+      {/* Loader Overlay */}
+      {isProcessing && (
+          <div className="fixed inset-0 z-[60] bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
+              <Loader2 size={48} className="text-green-500 animate-spin mb-4" />
+              <p className="text-slate-500 font-medium animate-pulse">Xyla 正在整理思绪...</p>
+          </div>
+      )}
+    </div>
+  );
+}
