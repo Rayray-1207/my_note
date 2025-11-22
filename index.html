@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>✨ 灵感小本本</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              neu: {
+                base: '#FFFFFF', // Pure White
+                text: '#171717', // Neutral 900 (High contrast black)
+                accent: '#22C55E', // Alien Green
+                pressed: '#F5F5F5' // Very light gray
+              }
+            },
+            boxShadow: {
+              // Crisp, tech-like shadows
+              'neu-flat': '3px 3px 8px #e5e5e5, -2px -2px 6px #ffffff', 
+              'neu-flat-sm': '2px 2px 4px #e5e5e5, -1px -1px 3px #ffffff',
+              'neu-pressed': 'inset 2px 2px 5px #e5e5e5, inset -2px -2px 5px #ffffff',
+              'neu-pressed-sm': 'inset 1px 1px 3px #e5e5e5, inset -1px -1px 3px #ffffff',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.4s ease-out',
+              'slide-up': 'slideUp 0.4s ease-out',
+              'scale-out': 'scaleOut 0.5s ease-in-out forwards',
+              'pop': 'pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+              'bounce-soft': 'bounceSoft 2s infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              scaleOut: {
+                '0%': { transform: 'scale(1)', opacity: '1' },
+                '100%': { transform: 'scale(0.1) translateY(200px)', opacity: '0' },
+              },
+              pop: {
+                '0%': { transform: 'scale(0.9)' },
+                '100%': { transform: 'scale(1)' },
+              },
+              bounceSoft: {
+                '0%, 100%': { transform: 'translateY(-5%)' },
+                '50%': { transform: 'translateY(0)' },
+              }
+            }
+          },
+        },
+      }
+    </script>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      body { background-color: #FFFFFF; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-neu-base text-neu-text antialiased overflow-hidden font-sans">
+    <div id="root"></div>
+  </body>
+</html>
