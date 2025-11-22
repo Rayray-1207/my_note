@@ -145,11 +145,11 @@ export default function App() {
             mediaMeta: result.isMedia ? {
                 title: title,
                 creator: result.mediaMeta?.creator || "未知创作者",
-                genre: result.mediaMeta?.genre,
-                coverUrl: imageBase64,
-                year: result.mediaMeta?.region
+                genre: result.mediaMeta?.genre || "", // Fix: Provide default empty string
+                coverUrl: imageBase64 || "",         // Fix: Provide default empty string
+                year: result.mediaMeta?.region || "" // Fix: Provide default empty string
             } : undefined,
-            originalImage: !result.isMedia ? imageBase64 : undefined
+            originalImage: !result.isMedia ? (imageBase64 || undefined) : undefined
         };
 
         setSuggestedKeywords(result.noteData.keywords);
