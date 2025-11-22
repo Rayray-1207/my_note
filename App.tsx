@@ -146,10 +146,10 @@ export default function App() {
                 title: title,
                 creator: result.mediaMeta?.creator || "未知创作者",
                 genre: result.mediaMeta?.genre,
-                coverUrl: imageBase64 || undefined,
+                coverUrl: imageBase64,
                 year: result.mediaMeta?.region
             } : undefined,
-            originalImage: !result.isMedia ? (imageBase64 || undefined) : undefined
+            originalImage: !result.isMedia ? imageBase64 : undefined
         };
 
         setSuggestedKeywords(result.noteData.keywords);

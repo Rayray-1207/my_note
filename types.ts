@@ -8,10 +8,10 @@ export enum RecordType {
 export interface MediaMetadata {
   title: string;
   creator: string; // Author, Director, Artist
-  coverUrl?: string; // Base64 string
-  genre?: string;
-  region?: string; // For movies
-  year?: string;
+  coverUrl?: string | undefined; // Base64 string
+  genre?: string | undefined;
+  region?: string | undefined; // For movies
+  year?: string | undefined;
 }
 
 export interface RecordData {
