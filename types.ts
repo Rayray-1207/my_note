@@ -14,6 +14,12 @@ export interface MediaMetadata {
   year?: string | undefined;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+  timestamp: number;
+}
+
 export interface RecordData {
   id: string;
   type: RecordType;
@@ -24,6 +30,7 @@ export interface RecordData {
   category: string; // e.g., Life, Work, Creative
   mediaMeta?: MediaMetadata;
   originalImage?: string; // Base64
+  chatHistory?: ChatMessage[];
 }
 
 // Gemini Response Schema

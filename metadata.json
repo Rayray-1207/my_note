@@ -1,5 +1,5 @@
 {
-  "name": "✨ 灵感小本本",
+  "name": "灵感小本本",
   "description": "一个可爱的智能灵感与媒体记录助手。通过语音、文字或拍照记录你的生活点滴、书籍、电影和音乐。",
   "requestFramePermissions": [
     "camera",
