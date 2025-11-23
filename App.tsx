@@ -242,7 +242,7 @@ export default function App() {
           [],
           "请对这段内容（如果是图片请基于图片）做一个简短有趣的点评，并询问我是否想深入探讨。"
       );
-      setChatMessages(prev => [...prev, { role: 'model', text: reply, timestamp: Date.now() }]);
+      setChatMessages(prev => [...prev, { role: 'model', text: reply ?? "...", timestamp: Date.now() }]);
       setIsChatLoading(false);
   };
 
@@ -261,7 +261,7 @@ export default function App() {
           userMsg
       );
 
-      setChatMessages([...newHistory, { role: 'model', text: reply || '...', timestamp: Date.now() }]);
+      setChatMessages([...newHistory, { role: 'model', text: reply ?? '...', timestamp: Date.now() }]);
       setIsChatLoading(false);
   };
 
