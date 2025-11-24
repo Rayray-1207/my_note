@@ -30,9 +30,9 @@ const analysisSchema = {
         keywords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "5-8 relevant keywords for selection." },
         category: { type: Type.STRING, enum: ["生活", "工作", "创意", "娱乐", "其他"] }
       }
-    }
-  },
-  required: ["isMedia", "detectedType", "noteData"]
+    },
+    required: ["isMedia", "detectedType", "noteData"]
+  }
 };
 
 export const analyzeInput = async (
@@ -45,7 +45,7 @@ export const analyzeInput = async (
       isMedia: false,
       detectedType: 'OTHER',
       noteData: {
-        content: text || "配置错误：未检测到 API Key。请在部署设置中添加 API_KEY 环境变量并重新部署。",
+        content: text || "配置错误：API Key 未生效。请在 Vercel 环境变量中添加 API_KEY，然后执行「Redeploy」以触发重新构建（Build）。前端应用必须重新构建才能读取到新的环境变量。",
         topic: "配置错误",
         keywords: ["Error"],
         category: "其他"
@@ -199,7 +199,7 @@ export const generateChatReply = async (
   history: { role: 'user' | 'model', text: string }[],
   message: string
 ) => {
-  if (!ai) return "配置错误：请检查 API Key。";
+  if (!ai) return "配置错误：API Key 未生效，请重新构建项目。";
 
   try {
     // Construct history in the format expected by Gemini
