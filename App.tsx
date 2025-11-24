@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { analyzeInput, generateChatReply } from './services/geminiService';
+import { analyzeInput, generateChatReply, proofreadText, extractKeywords } from './services/geminiService';
 import { RecordData, RecordType, ChatMessage } from './types';
 import { CalendarView } from './components/CalendarView';
 import { ListView } from './components/ListView';
@@ -34,6 +34,12 @@ const getLocalISOString = (ts: number) => {
     return (new Date(d.getTime() - offset)).toISOString().slice(0, 16);
 };
 
+const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
 // --- APP COMPONENT ---
 export default function App() {
   // View State
@@ -50,6 +56,7 @@ export default function App() {
   const [editingRecord, setEditingRecord] = useState<Partial<RecordData> | null>(null);
   const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState('');
+  const [isExtractingKeywords, setIsExtractingKeywords] = useState(false);
   
   // Chat State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -59,12 +66,16 @@ export default function App() {
   // Voice State
   const [inputText, setInputText] = useState('');
   const inputTextRef = useRef(''); 
+  // IMPORTANT: fullTranscriptRef tracks (Final + Interim) text to prevent data loss on stop
+  const fullTranscriptRef = useRef(''); 
   const [isListening, setIsListening] = useState(false);
   const isListeningRef = useRef(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   
   // Inline Voice State
   const [isInlineListening, setIsInlineListening] = useState(false);
   const inlineTargetRef = useRef<'EDIT_CONTENT' | 'CHAT_INPUT' | null>(null);
+  const initialInlineTextRef = useRef('');
   
   // Visuals
   const [isProcessing, setIsProcessing] = useState(false);
@@ -101,6 +112,19 @@ export default function App() {
         chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, view]);
+
+  // Timer Effect
+  useEffect(() => {
+    let interval: any;
+    if (isListening || isInlineListening) {
+      interval = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      setRecordingDuration(0);
+    }
+    return () => clearInterval(interval);
+  }, [isListening, isInlineListening]);
 
   // --- ACTIONS ---
 
@@ -159,6 +183,22 @@ export default function App() {
     }
   };
 
+  const handleAutoKeywords = async () => {
+    if (!editingRecord?.content) return;
+    setIsExtractingKeywords(true);
+    try {
+        const keys = await extractKeywords(editingRecord.content);
+        setSuggestedKeywords(prev => {
+            const newSet = new Set([...prev, ...keys]);
+            return Array.from(newSet);
+        });
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsExtractingKeywords(false);
+    }
+  };
+
   const handlePenClick = () => {
       setEditingRecord({
           id: Date.now().toString(),
@@ -205,6 +245,7 @@ export default function App() {
     setEditingRecord(null);
     setInputText('');
     inputTextRef.current = '';
+    fullTranscriptRef.current = '';
     setView('HOME');
   };
 
@@ -240,7 +281,7 @@ export default function App() {
       const reply = await generateChatReply(
           context,
           [],
-          "请对这段内容（如果是图片请基于图片）做一个简短有趣的点评，并询问我是否想深入探讨。"
+          "请用极其简短的一句话（20字以内）点评这段内容。风格要风趣幽默，不要长篇大论。"
       );
       setChatMessages(prev => [...prev, { role: 'model', text: reply ?? "...", timestamp: Date.now() }]);
       setIsChatLoading(false);
@@ -251,7 +292,7 @@ export default function App() {
       
       const userMsg = chatInput;
       setChatInput('');
-      const newHistory = [...chatMessages, { role: 'user' as const, text: userMsg, timestamp: Date.now() }];
+      const newHistory: ChatMessage[] = [...chatMessages, { role: 'user' as const, text: userMsg, timestamp: Date.now() }];
       setChatMessages(newHistory);
       setIsChatLoading(true);
 
@@ -261,7 +302,7 @@ export default function App() {
           userMsg
       );
 
-      setChatMessages([...newHistory, { role: 'model', text: reply ?? '...', timestamp: Date.now() }]);
+      setChatMessages(prev => [...prev, { role: 'model', text: reply ?? "", timestamp: Date.now() }]);
       setIsChatLoading(false);
   };
 
@@ -297,6 +338,7 @@ export default function App() {
         if (final) {
              inputTextRef.current += final;
         }
+        // IMPORTANT: combined result includes both confirmed and pending text
         onResult(inputTextRef.current + interim);
     };
     
@@ -315,12 +357,15 @@ export default function App() {
     
     setInputText('');
     inputTextRef.current = '';
+    fullTranscriptRef.current = ''; // Reset full transcript
     setIsListening(true);
     isListeningRef.current = true;
+    setRecordingDuration(0);
 
     recognitionRef.current = startVoiceRecognition(
         (text) => {
             setInputText(text);
+            fullTranscriptRef.current = text; // Update the full transcript source of truth
         },
         () => {
             // handled manually
@@ -329,7 +374,7 @@ export default function App() {
     );
   };
 
-  const stopListeningAndProcess = () => {
+  const stopListeningAndProcess = async () => {
     if (!isListeningRef.current) return;
     
     setIsListening(false);
@@ -341,19 +386,32 @@ export default function App() {
     }
 
     // Wait briefly for final results then process
-    setTimeout(() => {
-        const text = inputTextRef.current || inputText; 
+    setTimeout(async () => {
+        // Fix: Use fullTranscriptRef to ensure we capture pending/interim text 
+        // that might not have been finalized in inputTextRef yet.
+        const text = fullTranscriptRef.current; 
         
         if (!text.trim()) {
             return; 
+        }
+
+        // Show processing state
+        setIsProcessing(true);
+
+        // Call AI to proofread text (typos & punctuation)
+        let finalContent = text;
+        try {
+            finalContent = await proofreadText(text);
+        } catch(e) {
+            console.error("Proofread failed", e);
         }
 
         setEditingRecord({
             id: Date.now().toString(),
             timestamp: Date.now(),
             type: RecordType.NOTE,
-            content: text,
-            topic: text.slice(0, 10) + (text.length > 10 ? "..." : ""),
+            content: finalContent,
+            topic: finalContent.slice(0, 10) + (finalContent.length > 10 ? "..." : ""),
             keywords: [],
             category: '生活',
             chatHistory: []
@@ -362,34 +420,59 @@ export default function App() {
         setSuggestedKeywords([]);
         setView('EDIT_RECORD');
         setInputText('');
-        // DISABLED AUTO-ANALYSIS: User must click button to analyze
-        // handleAnalyze(text, undefined, false); 
+        fullTranscriptRef.current = '';
+        
+        setIsProcessing(false);
     }, 200);
   };
 
-  const toggleInlineVoice = (target: 'EDIT_CONTENT' | 'CHAT_INPUT') => {
-      if (isInlineListening) {
-          recognitionRef.current?.stop();
-          setIsInlineListening(false);
-          inlineTargetRef.current = null;
+  const handleInlineVoiceStart = (target: 'EDIT_CONTENT' | 'CHAT_INPUT') => {
+      if (isInlineListening) return;
+
+      // Capture current text before starting voice
+      if (target === 'EDIT_CONTENT') {
+          initialInlineTextRef.current = editingRecord?.content || '';
       } else {
-          inlineTargetRef.current = target;
-          setIsInlineListening(true);
-          
-          recognitionRef.current = startVoiceRecognition(
-              (text) => {
-                  if (target === 'EDIT_CONTENT') {
-                      setEditingRecord(prev => prev ? ({ ...prev, content: (prev.content || '') + text }) : null);
-                  } else if (target === 'CHAT_INPUT') {
-                      setChatInput(prev => prev + text);
-                  }
-              },
-              () => {
-                  setIsInlineListening(false);
-                  inlineTargetRef.current = null;
-              },
-              true
-          );
+          initialInlineTextRef.current = chatInput;
+      }
+      
+      // Reset global text accumulator used by startVoiceRecognition
+      inputTextRef.current = '';
+
+      inlineTargetRef.current = target;
+      setIsInlineListening(true);
+      setRecordingDuration(0);
+      
+      recognitionRef.current = startVoiceRecognition(
+          (text) => {
+              // Text is the cumulative transcript of the current session
+              // So we construct the new value as: Initial + Current Transcript
+              if (target === 'EDIT_CONTENT') {
+                  setEditingRecord(prev => prev ? ({ ...prev, content: initialInlineTextRef.current + text }) : null);
+              } else if (target === 'CHAT_INPUT') {
+                  setChatInput(initialInlineTextRef.current + text);
+              }
+          },
+          () => {
+             // Handle abrupt end or stop
+             if (isInlineListening) {
+                 setIsInlineListening(false);
+                 inlineTargetRef.current = null;
+             }
+          },
+          true
+      );
+  };
+
+  const handleInlineVoiceEnd = () => {
+      if (!isInlineListening) return;
+      
+      setIsInlineListening(false);
+      inlineTargetRef.current = null;
+      
+      if (recognitionRef.current) {
+          recognitionRef.current.stop();
+          recognitionRef.current = null;
       }
   };
 
@@ -628,8 +711,9 @@ export default function App() {
              <div className="flex-1 flex flex-col relative items-center justify-center pb-20">
                 
                 {/* Text positioned absolutely to avoid affecting flow */}
-                <div className="absolute top-[15%] w-full text-center px-6">
+                <div className="absolute top-[15%] w-full text-center px-6 flex flex-col items-center gap-2">
                       <div className="text-2xl font-bold text-green-600 animate-pulse">聆听中...</div>
+                      <div className="text-4xl font-mono text-neu-text/80">{formatDuration(recordingDuration)}</div>
                 </div>
 
                 <div className="flex flex-col gap-10 items-center">
@@ -652,9 +736,6 @@ export default function App() {
                 </div>
 
                 <div className="absolute bottom-[15%] w-full px-8 text-center">
-                      <p className="text-xl text-neu-text font-medium leading-relaxed break-words min-h-[3rem]">
-                          {inputText || "..."}
-                      </p>
                       <p className="text-xs text-slate-400 mt-6">松开结束录音</p>
                 </div>
              </div>
@@ -729,13 +810,31 @@ export default function App() {
                     />
                     
                     <button 
-                        onClick={() => toggleInlineVoice('EDIT_CONTENT')}
-                        className={`absolute bottom-4 left-4 w-8 h-8 rounded-full flex items-center justify-center transition-all ${isInlineListening && inlineTargetRef.current === 'EDIT_CONTENT' ? 'bg-green-500 text-black animate-pulse shadow-lg' : 'bg-neu-base shadow-neu-flat text-slate-400 active:shadow-neu-pressed'}`}
+                        // Mouse Events
+                        onMouseDown={(e) => { e.preventDefault(); handleInlineVoiceStart('EDIT_CONTENT'); }}
+                        onMouseUp={(e) => { e.preventDefault(); handleInlineVoiceEnd(); }}
+                        onMouseLeave={(e) => { e.preventDefault(); handleInlineVoiceEnd(); }}
+                        // Touch Events
+                        onTouchStart={(e) => { e.preventDefault(); handleInlineVoiceStart('EDIT_CONTENT'); }}
+                        onTouchEnd={(e) => { e.preventDefault(); handleInlineVoiceEnd(); }}
+                        onContextMenu={(e) => e.preventDefault()}
+                        
+                        className={`absolute bottom-4 left-4 w-8 h-8 rounded-full flex items-center justify-center transition-all select-none touch-none ${isInlineListening && inlineTargetRef.current === 'EDIT_CONTENT' ? 'bg-green-500 text-black animate-pulse shadow-lg scale-110' : 'bg-neu-base shadow-neu-flat text-slate-400 active:shadow-neu-pressed'}`}
                     >
                         <Mic size={16} />
                     </button>
 
                     <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                        {/* Keyword Extraction Button */}
+                        <button 
+                            onClick={handleAutoKeywords}
+                            disabled={isExtractingKeywords}
+                            className="w-8 h-8 bg-neu-base text-neu-text rounded-full shadow-neu-flat active:shadow-neu-pressed flex items-center justify-center transition-all opacity-90 hover:text-green-600 hover:opacity-100 disabled:opacity-50"
+                            title="提取关键词"
+                        >
+                            {isExtractingKeywords ? <Loader2 size={14} className="animate-spin"/> : <Tag size={16} />}
+                        </button>
+
                         {/* Sparkle button: Now solely responsible for triggering analysis */}
                         <button 
                             onClick={() => handleAnalyze(editingRecord.content || '', editingRecord.originalImage || editingRecord.mediaMeta?.coverUrl, true)}
@@ -754,7 +853,9 @@ export default function App() {
                 </div>
 
                 <div className="mb-8 flex items-center justify-start gap-2 px-2">
-                    <Clock size={14} className="text-slate-400" />
+                    <div className="w-6 h-6 flex items-center justify-center">
+                        <Clock size={16} className="text-slate-400" />
+                    </div>
                     <div className="bg-neu-base shadow-neu-pressed-sm rounded-lg px-3 py-1.5">
                         <input 
                             type="datetime-local"
@@ -771,9 +872,15 @@ export default function App() {
                 </div>
 
                 <div className="mb-10 border-b border-slate-100 pb-10">
-                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2 pl-1">
-                      <Tag size={14}/> 关键词
-                   </h4>
+                   <div className="flex items-center gap-2 mb-4 px-2">
+                      <div className="w-6 h-6 flex items-center justify-center text-slate-400">
+                          <Tag size={16} />
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                         关键词
+                      </h4>
+                   </div>
+                   
                    <div className="flex flex-wrap gap-3 mb-4">
                       {currentKw.map(kw => (
                          <button key={kw} onClick={() => toggleKeyword(kw)} className="px-4 py-2 rounded-full text-sm font-bold bg-green-500 text-black shadow-neu-flat hover:bg-green-600 active:shadow-neu-pressed transition-all">
@@ -876,8 +983,16 @@ export default function App() {
                      onKeyDown={e => e.key === 'Enter' && handleChatSend()}
                  />
                  <button 
-                    onClick={() => toggleInlineVoice('CHAT_INPUT')}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-all active:scale-95 ${isInlineListening && inlineTargetRef.current === 'CHAT_INPUT' ? 'bg-green-500 text-black animate-pulse' : 'bg-neu-base text-slate-400 hover:text-green-600'}`}
+                    // Mouse Events
+                    onMouseDown={(e) => { e.preventDefault(); handleInlineVoiceStart('CHAT_INPUT'); }}
+                    onMouseUp={(e) => { e.preventDefault(); handleInlineVoiceEnd(); }}
+                    onMouseLeave={(e) => { e.preventDefault(); handleInlineVoiceEnd(); }}
+                    // Touch Events
+                    onTouchStart={(e) => { e.preventDefault(); handleInlineVoiceStart('CHAT_INPUT'); }}
+                    onTouchEnd={(e) => { e.preventDefault(); handleInlineVoiceEnd(); }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    
+                    className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-all active:scale-95 select-none touch-none ${isInlineListening && inlineTargetRef.current === 'CHAT_INPUT' ? 'bg-green-500 text-black animate-pulse scale-110' : 'bg-neu-base text-slate-400 hover:text-green-600'}`}
                  >
                      <Mic size={18} />
                  </button>
@@ -900,6 +1015,16 @@ export default function App() {
       {/* Listening Overlay is always mounted but hidden by checks/opacity inside */}
       {renderListeningOverlay()} 
       
+      {/* Global Processing Loader */}
+      {isProcessing && (
+        <div className="absolute inset-0 z-[70] bg-neu-base/80 backdrop-blur-sm flex items-center justify-center animate-fade-in">
+            <div className="flex flex-col items-center gap-4">
+                <Loader2 className="w-10 h-10 text-green-500 animate-spin" />
+                <p className="text-neu-text font-medium animate-pulse text-sm tracking-wide">整理思绪中...</p>
+            </div>
+        </div>
+      )}
+
       {view === 'HOME' && (
         <>
           {renderTopBar()}
