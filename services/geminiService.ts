@@ -3,7 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult } from "../types";
 
 const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// Only initialize if key exists to avoid immediate crash, handle null check in functions
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // Schema definition for Gemini JSON output
 const analysisSchema = {
@@ -39,18 +40,47 @@ export const analyzeInput = async (
   imageBase64?: string
 ): Promise<AnalysisResult> => {
   
+  if (!ai) {
+    return {
+      isMedia: false,
+      detectedType: 'OTHER',
+      noteData: {
+        content: text || "配置错误：未检测到 API Key。请在部署设置中添加 API_KEY 环境变量并重新部署。",
+        topic: "配置错误",
+        keywords: ["Error"],
+        category: "其他"
+      }
+    };
+  }
+
   try {
     const modelId = "gemini-2.5-flash";
     
     const parts: any[] = [];
     
     if (imageBase64) {
-      // Extract base64 data if it contains the prefix
-      const cleanBase64 = imageBase64.split(',')[1] || imageBase64;
+      let mimeType = "image/jpeg";
+      let cleanBase64 = imageBase64;
+
+      // Robustly extract MIME type and base64 data from Data URL
+      if (imageBase64.startsWith("data:")) {
+        const parts = imageBase64.split(",");
+        if (parts.length >= 2) {
+            const meta = parts[0];
+            const data = parts.slice(1).join(","); 
+            
+            const mimeMatch = meta.match(/data:([^;]+)/);
+            if (mimeMatch) {
+                mimeType = mimeMatch[1];
+            }
+            cleanBase64 = data;
+        }
+      } 
+
       parts.push({
         inlineData: {
           data: cleanBase64,
-          mimeType: "image/jpeg" // Assuming JPEG for simplicity from camera/file input
+          mimeType: mimeType 
         }
       });
       parts.push({
@@ -81,16 +111,21 @@ export const analyzeInput = async (
     
     return JSON.parse(jsonText) as AnalysisResult;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Analysis Error:", error);
-    // Fallback object in case of failure
+    
+    let errorMsg = "分析暂时不可用";
+    if (error.toString().includes("403") || error.toString().includes("API key")) {
+        errorMsg = "API Key 无效或权限不足";
+    }
+
     return {
       isMedia: false,
       detectedType: 'OTHER',
       noteData: {
-        content: text || "无法分析内容，请重试。",
+        content: text || `${errorMsg} (请检查 Console 日志)`,
         topic: "分析失败",
-        keywords: ["错误"],
+        keywords: ["Error"],
         category: "其他"
       }
     };
@@ -98,6 +133,8 @@ export const analyzeInput = async (
 };
 
 export const extractKeywords = async (text: string): Promise<string[]> => {
+  if (!ai) return ["Error: No API Key"];
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -132,6 +169,8 @@ export const extractKeywords = async (text: string): Promise<string[]> => {
 };
 
 export const proofreadText = async (text: string): Promise<string> => {
+  if (!ai) return text;
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -151,7 +190,7 @@ export const proofreadText = async (text: string): Promise<string> => {
     return response.text?.trim() || text;
   } catch (error) {
     console.error("Proofread Error:", error);
-    return text; // Fallback to original on error
+    return text;
   }
 };
 
@@ -160,6 +199,8 @@ export const generateChatReply = async (
   history: { role: 'user' | 'model', text: string }[],
   message: string
 ) => {
+  if (!ai) return "配置错误：请检查 API Key。";
+
   try {
     // Construct history in the format expected by Gemini
     const formattedHistory = history.map(h => ({
@@ -186,6 +227,6 @@ Reply in Simplified Chinese.`
     return result.text;
   } catch (error) {
     console.error("Chat Error", error);
-    return "通讯受到干扰... 🛸 (Error)";
+    return "通讯受到干扰... 🛸 (Error: 请检查 API Key)";
   }
 };
