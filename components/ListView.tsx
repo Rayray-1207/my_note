@@ -10,15 +10,6 @@ interface Props {
 }
 
 export const ListView: React.FC<Props> = ({ records, mode, onSelectRecord }) => {
-  
-  const renderIcon = (type: RecordType, className: string) => {
-    switch (type) {
-      case RecordType.NOTE: return <FileText className={className} />;
-      case RecordType.BOOK: return <BookOpen className={className} />;
-      case RecordType.MOVIE: return <Film className={className} />;
-      case RecordType.MUSIC: return <Music className={className} />;
-    }
-  };
 
   const formatTimeShort = (ts: number) => {
     const d = new Date(ts);
@@ -66,23 +57,17 @@ export const ListView: React.FC<Props> = ({ records, mode, onSelectRecord }) => 
                 {record.content || (imageSrc ? '[图片记录]' : '[无内容]')}
             </p>
             
-            {!isWaterfall && record.keywords.length > 0 && (
-                <div className="flex gap-2 mt-3 flex-wrap">
+            {/* Keywords - Explicitly rendered for both modes */}
+            {record.keywords.length > 0 && (
+                <div className="flex gap-1.5 mt-3 flex-wrap">
                     {record.keywords.slice(0, 3).map(k => (
-                        <span key={k} className="px-2 py-1 rounded-md bg-slate-100 text-[10px] text-slate-500">#{k}</span>
+                        <span key={k} className="px-1.5 py-0.5 rounded-md bg-slate-50 text-[10px] text-slate-500 border border-slate-100">
+                            #{k}
+                        </span>
                     ))}
                 </div>
             )}
         </div>
-
-        {/* Icon Badge for List View if no image */}
-        {!isWaterfall && !imageSrc && (
-             <div className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center shadow-neu-pressed-sm ${
-                isMedia ? 'text-green-500' : 'text-slate-700'
-             }`}>
-                {renderIcon(record.type, "w-5 h-5 opacity-80")}
-            </div>
-        )}
       </div>
     );
   };
@@ -102,7 +87,7 @@ export const ListView: React.FC<Props> = ({ records, mode, onSelectRecord }) => 
 
   return (
     <div className="px-4 py-4 flex gap-4 items-start">
-        <div className="flex-1 flex flex-col w-0"> {/* w-0 helps flex children handle content properly */}
+        <div className="flex-1 flex flex-col w-0">
             {leftColumn.map(r => <Card key={r.id} record={r} isWaterfall={true} />)}
         </div>
         <div className="flex-1 flex flex-col w-0">

@@ -8,7 +8,7 @@ import {
   PenLine, Mic, Camera, X, Loader2, 
   Menu, Search, CalendarDays, LayoutGrid, 
   Tag, Check, ArrowLeft, Sparkles, Lightbulb, Clock,
-  Save, Home as HomeIcon, Dice5, Send, List, Plus
+  Save, Home as HomeIcon, Dice5, Send, List, Plus, Trash2
 } from 'lucide-react';
 
 // --- HELPERS ---
@@ -247,6 +247,23 @@ export default function App() {
     inputTextRef.current = '';
     fullTranscriptRef.current = '';
     setView('HOME');
+  };
+
+  const handleDeleteRecord = () => {
+    if (!editingRecord || !editingRecord.id) {
+        // Just discard if it's a new record
+        setEditingRecord(null);
+        setView('HOME');
+        return;
+    }
+    
+    if (window.confirm("确定要删除这条记忆吗？")) {
+        const newRecords = records.filter(r => r.id !== editingRecord.id);
+        setRecords(newRecords);
+        saveRecordsToStorage(newRecords);
+        setEditingRecord(null);
+        setView('HOME');
+    }
   };
 
   const handleFeelingLucky = () => {
@@ -569,40 +586,72 @@ export default function App() {
     </div>
   );
 
-  const renderSidebar = () => (
-    <>
-      {isSidebarOpen && <div className="fixed inset-0 z-40 bg-neu-base/50 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
-      <div className={`fixed top-0 left-0 h-full w-3/4 max-w-xs bg-neu-base z-50 shadow-neu-flat transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-8 pt-12 flex flex-col h-full">
-           <div className="flex justify-between items-center mb-10">
-              <h2 className="text-xl font-bold text-neu-text">菜单</h2>
-              <NeuButton onClick={() => setIsSidebarOpen(false)} icon={X} size="sm"/>
-           </div>
-           
-           <div className="mb-8">
-               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">显示模式</h3>
-               <div className="flex flex-col gap-4 pl-2">
-                  <button onClick={() => { setHomeMode('CALENDAR'); setView('LIST'); setIsSidebarOpen(false); }} className="flex items-center gap-3 text-neu-text hover:text-green-600 transition-colors">
-                      <CalendarDays size={18} /> 日历视图
-                  </button>
-                  <button onClick={() => { setHomeMode('WATERFALL'); setView('LIST'); setIsSidebarOpen(false); }} className="flex items-center gap-3 text-neu-text hover:text-green-600 transition-colors">
-                      <LayoutGrid size={18} /> 瀑布流视图
-                  </button>
-                  <button onClick={() => { setHomeMode('LIST'); setView('LIST'); setIsSidebarOpen(false); }} className="flex items-center gap-3 text-neu-text hover:text-green-600 transition-colors">
-                      <List size={18} /> 列表视图
-                  </button>
-               </div>
-           </div>
-           
-           <div className="flex-1 overflow-y-auto no-scrollbar">
-                 <div className="mt-auto pt-10">
-                    <p className="text-xs text-slate-300 text-center">共 {records.length} 条记忆</p>
-                 </div>
-           </div>
+  const renderSidebar = () => {
+    // Calculate most frequent keywords
+    const keywordMap = new Map<string, number>();
+    records.forEach(r => {
+        r.keywords.forEach(k => {
+            keywordMap.set(k, (keywordMap.get(k) || 0) + 1);
+        });
+    });
+    // Sort by count desc and take top 15
+    const commonKeywords = Array.from(keywordMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(entry => entry[0]);
+
+    return (
+        <>
+        {isSidebarOpen && <div className="fixed inset-0 z-40 bg-neu-base/50 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
+        <div className={`fixed top-0 left-0 h-full w-3/4 max-w-xs bg-neu-base z-50 shadow-neu-flat transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="p-8 pt-12 flex flex-col h-full">
+            <div className="flex justify-between items-center mb-10">
+                <h2 className="text-xl font-bold text-neu-text">菜单</h2>
+                <NeuButton onClick={() => setIsSidebarOpen(false)} icon={X} size="sm"/>
+            </div>
+            
+            <div className="mb-8">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">显示模式</h3>
+                <div className="flex flex-col gap-4 pl-2">
+                    <button onClick={() => { setHomeMode('CALENDAR'); setView('LIST'); setIsSidebarOpen(false); }} className="flex items-center gap-3 text-neu-text hover:text-green-600 transition-colors">
+                        <CalendarDays size={18} /> 日历视图
+                    </button>
+                    <button onClick={() => { setHomeMode('WATERFALL'); setView('LIST'); setIsSidebarOpen(false); }} className="flex items-center gap-3 text-neu-text hover:text-green-600 transition-colors">
+                        <LayoutGrid size={18} /> 瀑布流视图
+                    </button>
+                    <button onClick={() => { setHomeMode('LIST'); setView('LIST'); setIsSidebarOpen(false); }} className="flex items-center gap-3 text-neu-text hover:text-green-600 transition-colors">
+                        <List size={18} /> 列表视图
+                    </button>
+                </div>
+            </div>
+
+            {/* Common Keywords Section */}
+            <div className="mb-8">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">常用关键词</h3>
+                <div className="flex flex-wrap gap-2 pl-2">
+                    {commonKeywords.map(k => (
+                        <button 
+                            key={k} 
+                            onClick={() => { setSearchQuery(k); setView('SEARCH'); setIsSidebarOpen(false); }} 
+                            className="px-3 py-1.5 rounded-lg bg-neu-base shadow-neu-flat text-xs text-neu-text active:shadow-neu-pressed hover:text-green-600 transition-colors"
+                        >
+                            #{k}
+                        </button>
+                    ))}
+                    {commonKeywords.length === 0 && <span className="text-xs text-slate-300 pl-1">暂无关键词数据</span>}
+                </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto no-scrollbar">
+                    <div className="mt-auto pt-10">
+                        <p className="text-xs text-slate-300 text-center">共 {records.length} 条记忆</p>
+                    </div>
+            </div>
+            </div>
         </div>
-      </div>
-    </>
-  );
+        </>
+    );
+  };
 
   const renderHome = () => (
       <div className="flex-1 flex flex-col relative items-center justify-center pb-20">
@@ -764,10 +813,14 @@ export default function App() {
          {/* Header */}
          <div className="pt-12 px-6 pb-2 flex justify-between items-center bg-neu-base sticky top-0 z-20">
             <NeuButton onClick={() => saveCurrentRecord()} icon={ArrowLeft} />
-            <div className="w-10"></div>
-            <button onClick={saveCurrentRecord} className="w-10 h-10 bg-neu-base rounded-full text-neu-text shadow-neu-flat active:shadow-neu-pressed flex items-center justify-center transition-all hover:text-green-600">
-               <Check size={20}/>
-            </button>
+            <div className="flex items-center gap-4">
+                <button onClick={handleDeleteRecord} className="w-10 h-10 bg-neu-base rounded-full text-red-500 shadow-neu-flat active:shadow-neu-pressed flex items-center justify-center transition-all hover:bg-red-50">
+                    <Trash2 size={20}/>
+                </button>
+                <button onClick={saveCurrentRecord} className="w-10 h-10 bg-neu-base rounded-full text-neu-text shadow-neu-flat active:shadow-neu-pressed flex items-center justify-center transition-all hover:text-green-600">
+                    <Check size={20}/>
+                </button>
+            </div>
          </div>
 
          <div className="flex-1 overflow-y-auto no-scrollbar pt-4">
